@@ -24,17 +24,14 @@ class DockerSwarmStackMonitorType extends MonitorType {
         const options = this.buildAxiosOptions(monitor, dockerHost);
         await this.applyTlsOptions(dockerHost, options);
 
-        // Get all services in the stack
+        // Get all services in the stack (may be empty if stack was removed)
         const services = await this.getStackServices(monitor.docker_stack, options);
 
-        if (services.length === 0) {
-            heartbeat.status = PENDING;
-            heartbeat.msg = `No services found in stack '${monitor.docker_stack}'`;
-            return;
+        // Only create new monitors for newly discovered services
+        // Don't remove monitors for missing services - they'll show as DOWN
+        if (services.length > 0) {
+            await this.syncChildMonitors(monitor, services, server);
         }
-
-        // Sync child monitors with discovered services
-        await this.syncChildMonitors(monitor, services, server);
 
         // Now aggregate status like GroupMonitorType
         const children = await Monitor.getChildren(monitor.id);
@@ -163,7 +160,8 @@ class DockerSwarmStackMonitorType extends MonitorType {
 
     /**
      * Sync child monitors with discovered services
-     * Creates new monitors for new services, removes orphaned monitors
+     * Only creates new monitors for new services - does NOT remove monitors
+     * when services disappear (they will show as DOWN instead)
      * @param {object} monitor Parent stack monitor
      * @param {Array} services Discovered services from Docker
      * @param {object} server UptimeKumaServer instance
@@ -180,12 +178,8 @@ class DockerSwarmStackMonitorType extends MonitorType {
             }
         }
 
-        // Track which services we've seen
-        const seenServices = new Set();
-
         for (const service of services) {
             const serviceName = service.Spec?.Name || service.ID;
-            seenServices.add(serviceName);
 
             // Check if child monitor already exists
             if (!existingByService.has(serviceName)) {
@@ -195,13 +189,8 @@ class DockerSwarmStackMonitorType extends MonitorType {
             }
         }
 
-        // Remove orphaned child monitors (services that no longer exist)
-        for (const [serviceName, child] of existingByService) {
-            if (!seenServices.has(serviceName)) {
-                log.info("docker-swarm-stack", `Removing orphaned monitor for service '${serviceName}' in stack '${monitor.docker_stack}'`);
-                await this.removeChildMonitor(child.id, monitor.user_id);
-            }
-        }
+        // Note: We intentionally do NOT remove monitors for services that no longer exist
+        // They will show as DOWN, which is the expected behavior when a stack is removed
     }
 
     /**
@@ -235,25 +224,6 @@ class DockerSwarmStackMonitorType extends MonitorType {
         // Start the monitor
         const { startMonitor } = require("../util-server");
         await startMonitor(parentMonitor.user_id, bean.id);
-    }
-
-    /**
-     * Remove a child monitor
-     * @param {number} monitorId Monitor ID to remove
-     * @param {number} userId User ID
-     * @returns {Promise<void>}
-     */
-    async removeChildMonitor(monitorId, userId) {
-        const { stopMonitor } = require("../util-server");
-
-        // Stop the monitor first
-        await stopMonitor(userId, monitorId);
-
-        // Delete heartbeats
-        await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [monitorId]);
-
-        // Delete the monitor
-        await R.exec("DELETE FROM monitor WHERE id = ? AND user_id = ?", [monitorId, userId]);
     }
 }
 
