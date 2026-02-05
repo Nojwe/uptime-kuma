@@ -10,6 +10,7 @@ const { DockerHost } = require("../docker");
 
 class DockerSwarmServiceMonitorType extends MonitorType {
     name = "docker-swarm-service";
+    allowCustomStatus = true;
 
     /**
      * @inheritdoc
