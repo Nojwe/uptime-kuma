@@ -46,6 +46,9 @@
                                         <option value="docker-swarm-service">
                                             {{ $t("Docker Swarm Service") }}
                                         </option>
+                                        <option value="docker-swarm-stack">
+                                            {{ $t("Docker Swarm Stack") }}
+                                        </option>
                                         <option
                                             v-if="
                                                 ['linux', 'win32'].includes($root.info.runtime.platform) &&
@@ -940,6 +943,85 @@
                                 <label for="docker_swarm_grace_period" class="form-label">{{ $t("Grace Period") }} ({{ $t("sec") }})</label>
                                 <input
                                     id="docker_swarm_grace_period"
+                                    v-model="monitor.docker_swarm_grace_period"
+                                    type="number"
+                                    class="form-control"
+                                    min="0"
+                                    step="1"
+                                />
+                                <div class="form-text">
+                                    {{ $t("dockerSwarmGracePeriodDescription") }}
+                                </div>
+                            </div>
+
+                            <!-- Docker Swarm Stack -->
+                            <!-- Docker Host for Stack -->
+                            <div v-if="monitor.type === 'docker-swarm-stack'" class="my-3">
+                                <div class="mb-3">
+                                    <label for="docker-host-stack" class="form-label">{{ $t("Docker Host") }}</label>
+                                    <ActionSelect
+                                        id="docker-host-stack"
+                                        v-model="monitor.docker_host"
+                                        :action-aria-label="$t('openModalTo', $t('Setup Docker Host'))"
+                                        :options="dockerHostOptionsList"
+                                        :disabled="$root.dockerHostList == null || $root.dockerHostList.length === 0"
+                                        :icon="'plus'"
+                                        :action="() => $refs.dockerHostDialog.show()"
+                                        :required="true"
+                                        @update:model-value="loadDockerSwarmStacks"
+                                    />
+                                    <div class="form-text">
+                                        {{ $t("dockerSwarmManagerNote") }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Docker Stack Name -->
+                            <div v-if="monitor.type === 'docker-swarm-stack'" class="my-3">
+                                <label for="docker_stack" class="form-label">{{ $t("Stack Name") }}</label>
+                                <div class="input-group">
+                                    <select
+                                        id="docker_stack"
+                                        v-model="monitor.docker_stack"
+                                        class="form-select"
+                                        :disabled="!monitor.docker_host || dockerSwarmStacks.length === 0"
+                                        required
+                                    >
+                                        <option value="" disabled>{{ $t("Select Stack") }}</option>
+                                        <option v-for="stack in dockerSwarmStacks" :key="stack" :value="stack">
+                                            {{ stack }}
+                                        </option>
+                                    </select>
+                                    <button
+                                        class="btn btn-outline-secondary"
+                                        type="button"
+                                        :disabled="!monitor.docker_host"
+                                        @click="loadDockerSwarmStacks"
+                                    >
+                                        <font-awesome-icon icon="sync" :spin="loadingStacks" />
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    {{ $t("dockerSwarmStackDescription") }}
+                                </div>
+                            </div>
+
+                            <!-- Stack Services Preview -->
+                            <div v-if="monitor.type === 'docker-swarm-stack' && monitor.docker_stack && dockerStackServices.length > 0" class="my-3">
+                                <label class="form-label">{{ $t("Services in Stack") }}</label>
+                                <div class="stack-services-preview">
+                                    <div v-for="service in dockerStackServices" :key="service.id" class="service-item">
+                                        <span class="service-name">{{ service.name }}</span>
+                                        <span class="service-info text-muted">{{ service.replicas }} replica(s)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Docker Swarm Stack Grace Period -->
+                            <div v-if="monitor.type === 'docker-swarm-stack'" class="my-3">
+                                <label for="docker_swarm_grace_period_stack" class="form-label">{{ $t("Grace Period") }} ({{ $t("sec") }})</label>
+                                <input
+                                    id="docker_swarm_grace_period_stack"
                                     v-model="monitor.docker_swarm_grace_period"
                                     type="number"
                                     class="form-control"
@@ -2828,6 +2910,7 @@ const monitorDefaults = {
     docker_host: null,
     docker_service: "",
     docker_swarm_grace_period: 30,
+    docker_stack: "",
     proxyId: null,
     mqttUsername: "",
     mqttPassword: "",
@@ -2897,6 +2980,9 @@ export default {
                 mongodb: "mongodb://username:password@host:port/database",
             },
             draftGroupName: null,
+            dockerSwarmStacks: [],
+            dockerStackServices: [],
+            loadingStacks: false,
             remoteBrowsersEnabled: false,
             lowIntervalConfirmation: {
                 confirmed: false,
@@ -3209,6 +3295,10 @@ message HealthCheckResponse {
 
         "$route.fullPath"() {
             this.init();
+        },
+
+        "monitor.docker_stack"() {
+            this.loadDockerStackServices();
         },
 
         "monitor.interval"(value, oldValue) {
@@ -3683,6 +3773,62 @@ message HealthCheckResponse {
         },
 
         /**
+         * Load Docker Swarm stacks from the selected Docker host
+         * @returns {Promise<void>}
+         */
+        async loadDockerSwarmStacks() {
+            if (!this.monitor.docker_host) {
+                this.dockerSwarmStacks = [];
+                this.dockerStackServices = [];
+                return;
+            }
+
+            this.loadingStacks = true;
+            try {
+                const res = await new Promise((resolve) => {
+                    this.$root.getSocket().emit("getDockerSwarmStacks", this.monitor.docker_host, resolve);
+                });
+
+                if (res.ok) {
+                    this.dockerSwarmStacks = res.stacks;
+                } else {
+                    this.dockerSwarmStacks = [];
+                    this.$root.toastError(res.msg);
+                }
+            } catch (e) {
+                this.dockerSwarmStacks = [];
+                this.$root.toastError(e.message);
+            } finally {
+                this.loadingStacks = false;
+            }
+        },
+
+        /**
+         * Load services in a Docker Swarm stack
+         * @returns {Promise<void>}
+         */
+        async loadDockerStackServices() {
+            if (!this.monitor.docker_host || !this.monitor.docker_stack) {
+                this.dockerStackServices = [];
+                return;
+            }
+
+            try {
+                const res = await new Promise((resolve) => {
+                    this.$root.getSocket().emit("getDockerSwarmStackServices", this.monitor.docker_host, this.monitor.docker_stack, resolve);
+                });
+
+                if (res.ok) {
+                    this.dockerStackServices = res.services;
+                } else {
+                    this.dockerStackServices = [];
+                }
+            } catch (e) {
+                this.dockerStackServices = [];
+            }
+        },
+
+        /**
          * Submit the form data for processing
          * @returns {Promise<void>}
          */
@@ -3904,5 +4050,32 @@ message HealthCheckResponse {
 
 textarea {
     min-height: 200px;
+}
+
+.stack-services-preview {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+
+    .service-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.25rem 0.5rem;
+        border-bottom: 1px solid var(--bs-border-color);
+
+        &:last-child {
+            border-bottom: none;
+        }
+
+        .service-name {
+            font-weight: 500;
+        }
+
+        .service-info {
+            font-size: 0.875rem;
+        }
+    }
 }
 </style>

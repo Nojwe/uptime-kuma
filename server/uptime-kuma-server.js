@@ -132,6 +132,7 @@ class UptimeKumaServer {
         UptimeKumaServer.monitorTypeList["sqlserver"] = new MssqlMonitorType();
         UptimeKumaServer.monitorTypeList["mysql"] = new MysqlMonitorType();
         UptimeKumaServer.monitorTypeList["docker-swarm-service"] = new DockerSwarmServiceMonitorType();
+        UptimeKumaServer.monitorTypeList["docker-swarm-stack"] = new DockerSwarmStackMonitorType();
 
         // Allow all CORS origins (polling) in development
         let cors = undefined;
@@ -584,4 +585,5 @@ const { SystemServiceMonitorType } = require("./monitor-types/system-service");
 const { MssqlMonitorType } = require("./monitor-types/mssql");
 const { MysqlMonitorType } = require("./monitor-types/mysql");
 const { DockerSwarmServiceMonitorType } = require("./monitor-types/docker-swarm-service");
+const { DockerSwarmStackMonitorType } = require("./monitor-types/docker-swarm-stack");
 const Monitor = require("./model/monitor");

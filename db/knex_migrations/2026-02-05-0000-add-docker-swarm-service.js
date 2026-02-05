@@ -6,6 +6,7 @@ exports.up = async (knex) => {
     await knex.schema.alterTable("monitor", (table) => {
         table.string("docker_service", 255);
         table.integer("docker_swarm_grace_period").defaultTo(30);
+        table.string("docker_stack", 255);
     });
 };
 
@@ -17,5 +18,6 @@ exports.down = async (knex) => {
     await knex.schema.alterTable("monitor", (table) => {
         table.dropColumn("docker_service");
         table.dropColumn("docker_swarm_grace_period");
+        table.dropColumn("docker_stack");
     });
 };
