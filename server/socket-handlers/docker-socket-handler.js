@@ -167,6 +167,29 @@ module.exports.dockerSocketHandler = (socket) => {
             });
         }
     });
+
+    /**
+     * Sync Docker Swarm stack services - creates monitors for new services
+     */
+    socket.on("syncDockerSwarmStackServices", async (monitorId, callback) => {
+        try {
+            checkLogin(socket);
+
+            const result = await syncStackServices(monitorId, socket.userID);
+
+            callback({
+                ok: true,
+                msg: result.message,
+                newServices: result.newServices,
+            });
+        } catch (e) {
+            log.error("docker", e);
+            callback({
+                ok: false,
+                msg: e.message,
+            });
+        }
+    });
 };
 
 /**
@@ -212,3 +235,98 @@ async function applyDockerTlsOptions(dockerHost, options) {
         );
     }
 }
+
+/**
+ * Sync services for a Docker Swarm stack group monitor
+ * Creates child monitors for any new services discovered
+ * @param {number} monitorId The stack group monitor ID
+ * @param {number} userId The user ID
+ * @returns {Promise<{message: string, newServices: string[]}>}
+ */
+async function syncStackServices(monitorId, userId) {
+    const Monitor = require("../model/monitor");
+
+    // Get the stack monitor
+    const stackMonitor = await R.findOne("monitor", " id = ? AND user_id = ? ", [monitorId, userId]);
+    if (!stackMonitor) {
+        throw new Error("Monitor not found");
+    }
+
+    if (!stackMonitor.docker_stack) {
+        throw new Error("Monitor is not a Docker Swarm stack");
+    }
+
+    // Get the docker host
+    const dockerHost = await R.findOne("docker_host", " id = ? AND user_id = ? ", [stackMonitor.docker_host, userId]);
+    if (!dockerHost) {
+        throw new Error("Docker host not found");
+    }
+
+    // Query Docker for services in this stack
+    const options = buildDockerAxiosOptions(dockerHost);
+    await applyDockerTlsOptions(dockerHost, options);
+
+    const filters = {
+        label: [`com.docker.stack.namespace=${stackMonitor.docker_stack}`]
+    };
+
+    const response = await axios.request({
+        ...options,
+        url: `/services?filters=${encodeURIComponent(JSON.stringify(filters))}`,
+    });
+
+    const services = response.data || [];
+
+    // Get existing child monitors
+    const existingChildren = await Monitor.getChildren(monitorId);
+    const existingByService = new Map();
+    for (const child of existingChildren) {
+        if (child.docker_service) {
+            existingByService.set(child.docker_service, child);
+        }
+    }
+
+    // Create monitors for new services
+    const newServices = [];
+    for (const service of services) {
+        const serviceName = service.Spec?.Name || service.ID;
+
+        if (!existingByService.has(serviceName)) {
+            // Create new child monitor
+            const bean = R.dispense("monitor");
+            const displayName = serviceName.replace(`${stackMonitor.docker_stack}_`, "");
+
+            bean.name = displayName;
+            bean.type = "docker-swarm-service";
+            bean.user_id = userId;
+            bean.parent = monitorId;
+            bean.docker_host = stackMonitor.docker_host;
+            bean.docker_service = serviceName;
+            bean.docker_swarm_grace_period = stackMonitor.docker_swarm_grace_period || 30;
+            bean.interval = stackMonitor.interval || 60;
+            bean.retryInterval = stackMonitor.retryInterval || stackMonitor.interval || 60;
+            bean.maxretries = stackMonitor.maxretries || 0;
+            bean.active = true;
+            bean.accepted_statuscodes_json = JSON.stringify(["200-299"]);
+
+            await R.store(bean);
+            newServices.push(displayName);
+
+            log.info("docker-swarm-stack", `Created monitor for service '${serviceName}' in stack '${stackMonitor.docker_stack}'`);
+        }
+    }
+
+    if (newServices.length === 0) {
+        return {
+            message: "No new services found",
+            newServices: [],
+        };
+    }
+
+    return {
+        message: `Created ${newServices.length} new service monitor(s)`,
+        newServices,
+    };
+}
+
+module.exports.syncStackServices = syncStackServices;

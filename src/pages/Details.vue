@@ -118,6 +118,15 @@
                         <font-awesome-icon icon="clone" />
                         {{ $t("Clone") }}
                     </router-link>
+                    <button
+                        v-if="monitor.type === 'group' && monitor.docker_stack"
+                        class="btn btn-normal"
+                        :disabled="syncingServices"
+                        @click="syncStackServices"
+                    >
+                        <font-awesome-icon icon="sync" :spin="syncingServices" />
+                        {{ $t("Refresh Services") }}
+                    </button>
                     <button class="btn btn-normal text-danger" @click="deleteDialog">
                         <font-awesome-icon icon="trash" />
                         {{ $t("Delete") }}
@@ -465,6 +474,7 @@ export default {
             heartBeatList: [],
             toggleCertInfoBox: false,
             showPingChartBox: true,
+            syncingServices: false,
             paginationConfig: {
                 hideCount: true,
                 chunksNavigation: "scroll",
@@ -655,6 +665,22 @@ export default {
         pauseMonitor() {
             this.$root.getSocket().emit("pauseMonitor", this.monitor.id, (res) => {
                 this.$root.toastRes(res);
+            });
+        },
+
+        /**
+         * Sync Docker Swarm stack services
+         * @returns {void}
+         */
+        syncStackServices() {
+            this.syncingServices = true;
+            this.$root.getSocket().emit("syncDockerSwarmStackServices", this.monitor.id, (res) => {
+                this.syncingServices = false;
+                this.$root.toastRes(res);
+                if (res.ok && res.newServices && res.newServices.length > 0) {
+                    // Refresh monitor list to show new children
+                    this.$root.getSocket().emit("getMonitorList", () => {});
+                }
             });
         },
 

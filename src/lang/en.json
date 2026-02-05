@@ -488,6 +488,7 @@
     "Select Stack": "Select Stack",
     "Services in Stack": "Services in Stack",
     "dockerSwarmStackDescription": "Select a Docker Swarm stack to monitor. All services in the stack will be automatically discovered and monitored.",
+    "Refresh Services": "Refresh Services",
     "Domain": "Domain",
     "Workstation": "Workstation",
     "Packet Size": "Packet Size",

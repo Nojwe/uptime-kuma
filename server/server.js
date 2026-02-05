@@ -752,6 +752,12 @@ let needSetup = false;
                     }
                 }
 
+                // Handle Docker Swarm Stack - convert to group type
+                const isDockerSwarmStack = monitor.type === "docker-swarm-stack";
+                if (isDockerSwarmStack) {
+                    monitor.type = "group";
+                }
+
                 bean.import(monitor);
                 // Map camelCase frontend property to snake_case database column
                 if (monitor.retryOnlyOnStatusCodeFailure !== undefined) {
@@ -764,6 +770,26 @@ let needSetup = false;
                 await R.store(bean);
 
                 await updateMonitorNotification(bean.id, notificationIDList);
+
+                // If this is a Docker Swarm Stack, discover and create child service monitors
+                if (isDockerSwarmStack && bean.docker_stack) {
+                    const { syncStackServices } = require("./socket-handlers/docker-socket-handler");
+                    try {
+                        const result = await syncStackServices(bean.id, socket.userID);
+                        log.info("monitor", `Docker Swarm Stack: ${result.message}`);
+
+                        // Start the child monitors
+                        const childMonitors = await R.find("monitor", " parent = ? ", [bean.id]);
+                        for (const child of childMonitors) {
+                            if (child.active) {
+                                server.monitorList[child.id] = child;
+                                await child.start(io);
+                            }
+                        }
+                    } catch (e) {
+                        log.error("monitor", `Failed to sync Docker Swarm Stack services: ${e.message}`);
+                    }
+                }
 
                 await server.sendUpdateMonitorIntoList(socket, bean.id);
 
