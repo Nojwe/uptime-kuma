@@ -184,7 +184,7 @@ class DockerSwarmStackMonitorType extends MonitorType {
             // Check if child monitor already exists
             if (!existingByService.has(serviceName)) {
                 // Create new child monitor for this service
-                await this.createChildServiceMonitor(monitor, serviceName, service);
+                await this.createChildServiceMonitor(monitor, serviceName, service, server);
                 log.info("docker-swarm-stack", `Created monitor for service '${serviceName}' in stack '${monitor.docker_stack}'`);
             }
         }
@@ -198,9 +198,10 @@ class DockerSwarmStackMonitorType extends MonitorType {
      * @param {object} parentMonitor Parent stack monitor
      * @param {string} serviceName Service name
      * @param {object} service Service object from Docker API
+     * @param {object} server UptimeKumaServer instance
      * @returns {Promise<void>}
      */
-    async createChildServiceMonitor(parentMonitor, serviceName, service) {
+    async createChildServiceMonitor(parentMonitor, serviceName, service, server) {
         const bean = R.dispense("monitor");
 
         // Extract just the service name without stack prefix for display
@@ -221,9 +222,10 @@ class DockerSwarmStackMonitorType extends MonitorType {
 
         await R.store(bean);
 
-        // Start the monitor
-        const { startMonitor } = require("../util-server");
-        await startMonitor(parentMonitor.user_id, bean.id);
+        // Start the monitor using the server instance
+        // Similar to startMonitor() in server.js but we have direct access to the server
+        server.monitorList[bean.id] = bean;
+        await bean.start(server.io);
     }
 }
 
