@@ -43,6 +43,9 @@
                                         <option value="docker">
                                             {{ $t("Docker Container") }}
                                         </option>
+                                        <option value="docker-swarm-service">
+                                            {{ $t("Docker Swarm Service") }}
+                                        </option>
                                         <option
                                             v-if="
                                                 ['linux', 'win32'].includes($root.info.runtime.platform) &&
@@ -893,6 +896,58 @@
                                         :action="() => $refs.dockerHostDialog.show()"
                                         :required="true"
                                     />
+                                </div>
+                            </div>
+
+                            <!-- Docker Swarm Service -->
+                            <!-- For Docker Swarm Service Type -->
+                            <div v-if="monitor.type === 'docker-swarm-service'" class="my-3">
+                                <label for="docker_service" class="form-label">{{ $t("Service Name") }}</label>
+                                <input
+                                    id="docker_service"
+                                    v-model="monitor.docker_service"
+                                    type="text"
+                                    class="form-control"
+                                    required
+                                />
+                                <div class="form-text">
+                                    {{ $t("dockerSwarmServiceDescription") }}
+                                </div>
+                            </div>
+
+                            <!-- Docker Host for Swarm Service -->
+                            <div v-if="monitor.type === 'docker-swarm-service'" class="my-3">
+                                <div class="mb-3">
+                                    <label for="docker-host-swarm" class="form-label">{{ $t("Docker Host") }}</label>
+                                    <ActionSelect
+                                        id="docker-host-swarm"
+                                        v-model="monitor.docker_host"
+                                        :action-aria-label="$t('openModalTo', $t('Setup Docker Host'))"
+                                        :options="dockerHostOptionsList"
+                                        :disabled="$root.dockerHostList == null || $root.dockerHostList.length === 0"
+                                        :icon="'plus'"
+                                        :action="() => $refs.dockerHostDialog.show()"
+                                        :required="true"
+                                    />
+                                    <div class="form-text">
+                                        {{ $t("dockerSwarmManagerNote") }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Docker Swarm Grace Period -->
+                            <div v-if="monitor.type === 'docker-swarm-service'" class="my-3">
+                                <label for="docker_swarm_grace_period" class="form-label">{{ $t("Grace Period") }} ({{ $t("sec") }})</label>
+                                <input
+                                    id="docker_swarm_grace_period"
+                                    v-model="monitor.docker_swarm_grace_period"
+                                    type="number"
+                                    class="form-control"
+                                    min="0"
+                                    step="1"
+                                />
+                                <div class="form-text">
+                                    {{ $t("dockerSwarmGracePeriodDescription") }}
                                 </div>
                             </div>
 
@@ -2771,6 +2826,8 @@ const monitorDefaults = {
     dns_resolve_server: "",
     docker_container: "",
     docker_host: null,
+    docker_service: "",
+    docker_swarm_grace_period: 30,
     proxyId: null,
     mqttUsername: "",
     mqttPassword: "",

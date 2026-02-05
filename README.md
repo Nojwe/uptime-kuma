@@ -23,7 +23,7 @@ It is a temporary live demo, all data will be deleted after 10 minutes. Sponsore
 
 ## ⭐ Features
 
-- Monitoring uptime for HTTP(s) / TCP / HTTP(s) Keyword / HTTP(s) Json Query / Websocket / Ping / DNS Record / Push / Steam Game Server / Docker Containers
+- Monitoring uptime for HTTP(s) / TCP / HTTP(s) Keyword / HTTP(s) Json Query / Websocket / Ping / DNS Record / Push / Steam Game Server / Docker Containers / Docker Swarm Services
 - Fancy, Reactive, Fast UI/UX
 - Notifications via Telegram, Discord, Gotify, Slack, Pushover, Email (SMTP), and [90+ notification services, click here for the full list](https://github.com/louislam/uptime-kuma/tree/master/src/components/notifications)
 - 20-second intervals
@@ -34,6 +34,10 @@ It is a temporary live demo, all data will be deleted after 10 minutes. Sponsore
 - Certificate info
 - Proxy support
 - 2FA support
+
+### Docker Swarm Service Monitoring
+
+To monitor Docker Swarm services, Uptime Kuma must be deployed on a **Swarm manager node**. Worker nodes do not have access to the Swarm management API required to query service status.
 
 ## 🔧 How to Install
 
