@@ -10,6 +10,7 @@ const Monitor = require("../model/monitor");
 
 class DockerSwarmStackMonitorType extends MonitorType {
     name = "docker-swarm-stack";
+    allowCustomStatus = true;
 
     /**
      * @inheritdoc
