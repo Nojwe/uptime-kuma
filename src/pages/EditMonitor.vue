@@ -3178,10 +3178,10 @@ message HealthCheckResponse {
         sortedGroupMonitorList() {
             let result = Object.values(this.$root.monitorList);
 
-            // Only groups, not itself, not a decendant
+            // Only groups (including stack monitors), not itself, not a descendant
             result = result.filter(
                 (monitor) =>
-                    monitor.type === "group" &&
+                    (monitor.type === "group" || monitor.type === "docker-swarm-stack") &&
                     monitor.id !== this.monitor.id &&
                     !this.monitor.childrenIDs?.includes(monitor.id)
             );
