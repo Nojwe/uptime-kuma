@@ -177,6 +177,20 @@ module.exports.dockerSocketHandler = (socket) => {
 
             const result = await syncStackServices(monitorId, socket.userID);
 
+            // Start the newly created monitors
+            if (result.newMonitorIds && result.newMonitorIds.length > 0) {
+                const { UptimeKumaServer } = require("../uptime-kuma-server");
+                const server = UptimeKumaServer.getInstance();
+
+                for (const newMonitorId of result.newMonitorIds) {
+                    const monitor = await R.findOne("monitor", " id = ? ", [newMonitorId]);
+                    if (monitor && monitor.active) {
+                        server.monitorList[monitor.id] = monitor;
+                        await monitor.start(server.io);
+                    }
+                }
+            }
+
             callback({
                 ok: true,
                 msg: result.message,
@@ -288,6 +302,7 @@ async function syncStackServices(monitorId, userId) {
 
     // Create monitors for new services
     const newServices = [];
+    const newMonitorIds = [];
     for (const service of services) {
         const serviceName = service.Spec?.Name || service.ID;
 
@@ -311,6 +326,7 @@ async function syncStackServices(monitorId, userId) {
 
             await R.store(bean);
             newServices.push(displayName);
+            newMonitorIds.push(bean.id);
 
             log.info("docker-swarm-stack", `Created monitor for service '${serviceName}' in stack '${stackMonitor.docker_stack}'`);
         }
@@ -320,12 +336,14 @@ async function syncStackServices(monitorId, userId) {
         return {
             message: "No new services found",
             newServices: [],
+            newMonitorIds: [],
         };
     }
 
     return {
         message: `Created ${newServices.length} new service monitor(s)`,
         newServices,
+        newMonitorIds,
     };
 }
 
