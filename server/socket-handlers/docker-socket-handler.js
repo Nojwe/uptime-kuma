@@ -309,9 +309,9 @@ async function syncStackServices(monitorId, userId) {
         if (!existingByService.has(serviceName)) {
             // Create new child monitor
             const bean = R.dispense("monitor");
-            const displayName = serviceName.replace(`${stackMonitor.docker_stack}_`, "");
 
-            bean.name = displayName;
+            // Use full service name (stack_service) for clarity
+            bean.name = serviceName;
             bean.type = "docker-swarm-service";
             bean.user_id = userId;
             bean.parent = monitorId;
@@ -325,7 +325,7 @@ async function syncStackServices(monitorId, userId) {
             bean.accepted_statuscodes_json = JSON.stringify(["200-299"]);
 
             await R.store(bean);
-            newServices.push(displayName);
+            newServices.push(serviceName);
             newMonitorIds.push(bean.id);
 
             log.info("docker-swarm-stack", `Created monitor for service '${serviceName}' in stack '${stackMonitor.docker_stack}'`);
