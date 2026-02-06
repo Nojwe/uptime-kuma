@@ -785,12 +785,14 @@ let needSetup = false;
                         const result = await syncStackServices(existingGroup.id, socket.userID);
                         log.info("monitor", `Docker Swarm Stack merged: ${result.message}`);
 
-                        // Start the new child monitors
-                        const childMonitors = await R.find("monitor", " parent = ? AND id NOT IN (SELECT id FROM monitor WHERE parent = ? AND active = 1) ", [existingGroup.id, existingGroup.id]);
-                        for (const child of childMonitors) {
-                            if (child.active) {
-                                server.monitorList[child.id] = child;
-                                await child.start(io);
+                        // Start the newly created child monitors
+                        if (result.newMonitorIds && result.newMonitorIds.length > 0) {
+                            for (const newMonitorId of result.newMonitorIds) {
+                                const child = await R.findOne("monitor", " id = ? ", [newMonitorId]);
+                                if (child && child.active) {
+                                    server.monitorList[child.id] = child;
+                                    await child.start(io);
+                                }
                             }
                         }
                     } catch (e) {
@@ -828,12 +830,14 @@ let needSetup = false;
                         const result = await syncStackServices(bean.id, socket.userID);
                         log.info("monitor", `Docker Swarm Stack: ${result.message}`);
 
-                        // Start the child monitors
-                        const childMonitors = await R.find("monitor", " parent = ? ", [bean.id]);
-                        for (const child of childMonitors) {
-                            if (child.active) {
-                                server.monitorList[child.id] = child;
-                                await child.start(io);
+                        // Start the newly created child monitors
+                        if (result.newMonitorIds && result.newMonitorIds.length > 0) {
+                            for (const newMonitorId of result.newMonitorIds) {
+                                const child = await R.findOne("monitor", " id = ? ", [newMonitorId]);
+                                if (child && child.active) {
+                                    server.monitorList[child.id] = child;
+                                    await child.start(io);
+                                }
                             }
                         }
                     } catch (e) {
