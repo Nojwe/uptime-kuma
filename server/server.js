@@ -752,10 +752,60 @@ let needSetup = false;
                     }
                 }
 
-                // Handle Docker Swarm Stack - convert to group type
+                // Handle Docker Swarm Stack - convert to group type or merge with existing group
                 const isDockerSwarmStack = monitor.type === "docker-swarm-stack";
+                let existingGroup = null;
+
                 if (isDockerSwarmStack) {
-                    monitor.type = "group";
+                    // Check if a group with the same name already exists
+                    existingGroup = await R.findOne("monitor", " user_id = ? AND type = ? AND name = ? ", [
+                        socket.userID,
+                        "group",
+                        monitor.name
+                    ]);
+
+                    if (existingGroup) {
+                        // Update existing group with docker stack settings
+                        existingGroup.docker_host = monitor.docker_host;
+                        existingGroup.docker_stack = monitor.docker_stack;
+                        existingGroup.docker_swarm_grace_period = monitor.docker_swarm_grace_period;
+                        await R.store(existingGroup);
+
+                        log.info("monitor", `Merging Docker Swarm Stack into existing group: ${existingGroup.name} (ID: ${existingGroup.id})`);
+                    } else {
+                        monitor.type = "group";
+                    }
+                }
+
+                // If merging with existing group, skip creating new monitor
+                if (existingGroup) {
+                    // Sync services to the existing group
+                    const { syncStackServices } = require("./socket-handlers/docker-socket-handler");
+                    try {
+                        const result = await syncStackServices(existingGroup.id, socket.userID);
+                        log.info("monitor", `Docker Swarm Stack merged: ${result.message}`);
+
+                        // Start the new child monitors
+                        const childMonitors = await R.find("monitor", " parent = ? AND id NOT IN (SELECT id FROM monitor WHERE parent = ? AND active = 1) ", [existingGroup.id, existingGroup.id]);
+                        for (const child of childMonitors) {
+                            if (child.active) {
+                                server.monitorList[child.id] = child;
+                                await child.start(io);
+                            }
+                        }
+                    } catch (e) {
+                        log.error("monitor", `Failed to sync Docker Swarm Stack services: ${e.message}`);
+                    }
+
+                    await server.sendUpdateMonitorIntoList(socket, existingGroup.id);
+
+                    callback({
+                        ok: true,
+                        msg: "successAdded",
+                        msgi18n: true,
+                        monitorID: existingGroup.id,
+                    });
+                    return;
                 }
 
                 bean.import(monitor);
